@@ -42,6 +42,9 @@ INSTALLED_APPS = [
     'student_dashboard',
     'tutor_dashboard',
 
+    #installed apps
+    
+
 ]
 
 MIDDLEWARE = [
@@ -73,6 +76,9 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'onlineSchool.wsgi.application'
+
+AUTH_USER_MODEL = 'Home.User'
+
 
 
 # Database
