@@ -143,3 +143,5 @@ admin.site.register(CareerTestResult, CareerTestResultAdmin)
 
 admin.site.register(Payment, PaymentAdmin)
 admin.site.register(Commission, CommissionAdmin)
+
+

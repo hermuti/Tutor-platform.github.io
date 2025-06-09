@@ -1,42 +1,66 @@
-<!-- Example: student_register.html -->
-{% extends "base.html" %} {% block content %}
+{% extends "base.html" %}
+
+{% block content %}
 <div class="auth-container">
   <h2 class="text-center mb-4">Create Your Account</h2>
-
+  
   <form method="post">
     {% csrf_token %}
-
-    <div class="user-type-selector">
-      <button type="button" class="user-type-btn active" id="student-btn">
-        Student
-      </button>
-      <button type="button" class="user-type-btn" id="tutor-btn">Tutor</button>
-      <input type="hidden" name="user_type" id="user_type" value="student" />
+    
+    <!-- Role Selection -->
+    <div class="mb-3">
+      <label class="form-label">Register as:</label>
+      <select class="form-select" name="role" required>
+        <option value="" selected disabled>Select your role</option>
+        <option value="student" {% if role == 'student' %}selected{% endif %}>Student</option>
+        <option value="tutor" {% if role == 'tutor' %}selected{% endif %}>Tutor</option>
+      </select>
     </div>
-
-    {{ form.as_p }}
-
+    
+    <!-- Personal Information -->
+    <div class="mb-3">
+      <label for="username" class="form-label">Username</label>
+      <input type="text" class="form-control" id="username" name="username" 
+             value="{{ username|default:'' }}" required>
+    </div>
+    
+    <div class="mb-3">
+      <label for="email" class="form-label">Email</label>
+      <input type="email" class="form-control" id="email" name="email"
+             value="{{ email|default:'' }}" required>
+    </div>
+    
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label for="first_name" class="form-label">First Name</label>
+        <input type="text" class="form-control" id="first_name" name="first_name"
+               value="{{ first_name|default:'' }}" required>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label for="last_name" class="form-label">Last Name</label>
+        <input type="text" class="form-control" id="last_name" name="last_name"
+               value="{{ last_name|default:'' }}" required>
+      </div>
+    </div>
+    
+    <!-- Password -->
+    <div class="mb-3">
+      <label for="password1" class="form-label">Password</label>
+      <input type="password" class="form-control" id="password1" name="password1" required>
+    </div>
+    
+    <div class="mb-3">
+      <label for="password2" class="form-label">Confirm Password</label>
+      <input type="password" class="form-control" id="password2" name="password2" required>
+    </div>
+    
     <div class="d-grid gap-2">
       <button type="submit" class="btn btn-primary">Register</button>
     </div>
   </form>
-
+  
   <div class="text-center mt-3">
     <p>Already have an account? <a href="{% url 'login' %}">Login here</a></p>
   </div>
 </div>
-
-<script>
-  document.getElementById("student-btn").addEventListener("click", function () {
-    this.classList.add("active");
-    document.getElementById("tutor-btn").classList.remove("active");
-    document.getElementById("user_type").value = "student";
-  });
-
-  document.getElementById("tutor-btn").addEventListener("click", function () {
-    this.classList.add("active");
-    document.getElementById("student-btn").classList.remove("active");
-    document.getElementById("user_type").value = "tutor";
-  });
-</script>
 {% endblock %}

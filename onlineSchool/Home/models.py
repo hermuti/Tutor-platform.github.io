@@ -65,10 +65,15 @@ class User(AbstractUser):
             ('suspended', 'Suspended')
         )
     )
-
     username = models.CharField(max_length=150, unique=True)
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150)
+    is_student = models.BooleanField(default=False)
+    is_tutor = models.BooleanField(default=False)
+    is_admin = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.username
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
@@ -270,11 +275,12 @@ class Commission(models.Model):
 
 
 class StudentProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True)
     # Add student-specific fields
     created_at = models.DateTimeField(auto_now_add=True)
 
 class TutorProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.OneToOneField(User, on_delete=models.CASCADE,primary_key=True)
     # Add tutor-specific fields
     created_at = models.DateTimeField(auto_now_add=True)
+

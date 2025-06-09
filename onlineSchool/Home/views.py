@@ -1,74 +1,156 @@
 from django.views.generic import TemplateView, CreateView
 from django.contrib.auth.views import LoginView, LogoutView
-from django.utils.decorators import method_decorator  # Add this import
+from django.utils.decorators import method_decorator
 from django.urls import reverse_lazy
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.models import User
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from .forms import StudentRegisterForm, TutorRegisterForm
+from django.contrib.auth import get_user_model
+from .models import User, StudentProfile, TutorProfile  # Updated imports
+
+User = get_user_model()
 
 # ====================== Authentication Views ======================
 class CustomLoginView(LoginView):
     template_name = 'accounts/login.html'
+    redirect_authenticated_user = True  # Add this line
     
     def form_valid(self, form):
         role = self.request.POST.get('role')
         user = form.get_user()
         
+        if not role:
+            messages.error(self.request, "Please select a role")
+            return redirect('login')
+        
+        # Validate user role
         if not self._validate_user_role(user, role):
-            messages.error(self.request, "Invalid role for this user")
+            messages.error(self.request, "Invalid role for this account")
             return redirect('login')
         
         login(self.request, user)
+        #return self._redirect_based_on_role(role)
         return self._redirect_based_on_role(role)
+
     
     def _validate_user_role(self, user, role):
-        # Implement your actual role validation logic here
-        # Example: return user.profile.role == role
-        return True  # Placeholder
+        """Check if user has the selected role"""
+        if role == 'student' and user.is_student:
+            return True
+        elif role == 'tutor' and user.is_tutor:
+            return True
+        elif role == 'admin' and user.is_admin:
+            return True
+        return False
     
     def _redirect_based_on_role(self, role):
+        """Redirect to appropriate dashboard based on role"""
         if role == 'student':
             return redirect('student_dashboard')
         elif role == 'tutor':
             return redirect('tutor_dashboard')
         elif role == 'admin':
-            return redirect('/admin/')
+            return redirect('admin_dashboard')
         return redirect('home')
 
 class CustomLogoutView(LogoutView):
-    next_page = reverse_lazy('login')
+    next_page = reverse_lazy('home')
     
     def dispatch(self, request, *args, **kwargs):
-        messages.success(request, "Logged out successfully.")
-        return super().dispatch(request, *args, **kwargs)
+        response = super().dispatch(request, *args, **kwargs)
+        messages.success(request, "You have been successfully logged out.")
+        return response
 
 # ====================== Registration Views ======================
-class StudentRegisterView(CreateView):
-    form_class = StudentRegisterForm
-    template_name = 'accounts/student_register.html'
-    success_url = reverse_lazy('student_dashboard')
-    
-    def form_valid(self, form):
-        response = super().form_valid(form)
-        user = form.instance
-        login(self.request, user)
-        # Create student profile here if needed
-        return response
+def register_view(request):
+    if request.method == 'POST':
+        # Get form data
+        username = request.POST.get('username')
+        email = request.POST.get('email')
+        password1 = request.POST.get('password1')
+        password2 = request.POST.get('password2')
+        role = request.POST.get('role')
+        first_name = request.POST.get('first_name')
+        last_name = request.POST.get('last_name')
 
-class TutorRegisterView(CreateView):
-    form_class = TutorRegisterForm
-    template_name = 'accounts/tutor_register.html'
-    success_url = reverse_lazy('tutor_dashboard')
+        # Validate required fields
+        if not all([username, email, password1, password2, role, first_name, last_name]):
+            messages.error(request, "All fields are required.")
+            return render(request, 'accounts/register.html', {
+                'username': username,
+                'email': email,
+                'first_name': first_name,
+                'last_name': last_name,
+                'role': role
+            })
+
+        if password1 != password2:
+            messages.error(request, "Passwords don't match.")
+            return render(request, 'accounts/register.html', {
+                'username': username,
+                'email': email,
+                'first_name': first_name,
+                'last_name': last_name,
+                'role': role
+            })
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, "Username already exists.")
+            return render(request, 'accounts/register.html', {
+                'email': email,
+                'first_name': first_name,
+                'last_name': last_name,
+                'role': role
+            })
+
+        if User.objects.filter(email=email).exists():
+            messages.error(request, "Email already exists.")
+            return render(request, 'accounts/register.html', {
+                'username': username,
+                'first_name': first_name,
+                'last_name': last_name,
+                'role': role
+            })
+
+        try:
+            # Create user with all required fields
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=password1,
+                first_name=first_name,
+                last_name=last_name,
+                role=role
+            )
+            
+            # Set role flags and create profile
+            if role == 'student':
+                user.is_student = True
+                StudentProfile.objects.create(user=user)
+            elif role == 'tutor':
+                user.is_tutor = True
+                TutorProfile.objects.create(user=user)
+            elif role == 'admin':
+                user.is_admin = True
+            
+            user.save()
+            
+            messages.success(request, "Registration successful! Please login.")
+            return redirect('login')
+            
+        except Exception as e:
+            messages.error(request, f"Error during registration: {str(e)}")
+            return render(request, 'accounts/register.html', {
+                'username': username,
+                'email': email,
+                'first_name': first_name,
+                'last_name': last_name,
+                'role': role
+            })
     
-    def form_valid(self, form):
-        response = super().form_valid(form)
-        user = form.instance
-        login(self.request, user)
-        # Create tutor profile here if needed
-        return response
+    return render(request, 'accounts/register.html')
 
 # ====================== Dashboard Views ======================
 class StudentDashboardView(TemplateView):
@@ -76,7 +158,9 @@ class StudentDashboardView(TemplateView):
     
     @method_decorator(login_required)
     def dispatch(self, request, *args, **kwargs):
-        # Add role verification if needed
+        if not request.user.is_student:
+            messages.error(request, "You don't have permission to access this page.")
+            return redirect('login')
         return super().dispatch(request, *args, **kwargs)
 
 class TutorDashboardView(TemplateView):
@@ -84,7 +168,9 @@ class TutorDashboardView(TemplateView):
     
     @method_decorator(login_required)
     def dispatch(self, request, *args, **kwargs):
-        # Add role verification if needed
+        if not request.user.is_tutor:
+            messages.error(request, "You don't have permission to access this page.")
+            return redirect('login')
         return super().dispatch(request, *args, **kwargs)
 
 class AdminDashboardView(TemplateView):
@@ -92,61 +178,7 @@ class AdminDashboardView(TemplateView):
     
     @method_decorator(login_required)
     def dispatch(self, request, *args, **kwargs):
-        # Add admin verification
-        return super().dispatch(request, *args, **kwargs)
-
-# ====================== Function-Based Views ======================
-def register_view(request):
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        email = request.POST.get('email')
-        password1 = request.POST.get('password1')
-        password2 = request.POST.get('password2')
-        role = request.POST.get('role')
-
-        if password1 != password2:
-            messages.error(request, "Passwords don't match.")
-            return redirect('register')
-
-        if User.objects.filter(username=username).exists():
-            messages.error(request, "Username already exists.")
-            return redirect('register')
-
-        user = User.objects.create_user(username=username, email=email, password=password1)
-        
-        # Here you would typically create a profile based on the role
-        # Example: StudentProfile.objects.create(user=user, role=role)
-        
-        messages.success(request, "Registration successful. Please login.")
-        return redirect('login')
-    
-    return render(request, 'accounts/register.html')
-
-def login_view(request):
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        password = request.POST.get('password')
-        role = request.POST.get('role')
-
-        user = authenticate(request, username=username, password=password)
-        
-        # You need to implement role validation here
-        # Example: if user is not None and user.profile.role == role:
-        if user is not None:
-            login(request, user)
-            if role == 'student':
-                return redirect('student_dashboard')
-            elif role == 'tutor':
-                return redirect('tutor_dashboard')
-            elif role == 'admin':
-                return redirect('/admin/')
-        else:
-            messages.error(request, "Invalid credentials or role.")
+        if not request.user.is_admin:
+            messages.error(request, "You don't have permission to access this page.")
             return redirect('login')
-    
-    return render(request, 'accounts/login.html')
-
-def logout_view(request):
-    logout(request)
-    messages.success(request, "Logged out successfully.")
-    return redirect('login')
+        return super().dispatch(request, *args, **kwargs)
