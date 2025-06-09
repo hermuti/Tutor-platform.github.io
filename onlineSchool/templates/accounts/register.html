@@ -1,0 +1,42 @@
+<!-- Example: student_register.html -->
+{% extends "base.html" %} {% block content %}
+<div class="auth-container">
+  <h2 class="text-center mb-4">Create Your Account</h2>
+
+  <form method="post">
+    {% csrf_token %}
+
+    <div class="user-type-selector">
+      <button type="button" class="user-type-btn active" id="student-btn">
+        Student
+      </button>
+      <button type="button" class="user-type-btn" id="tutor-btn">Tutor</button>
+      <input type="hidden" name="user_type" id="user_type" value="student" />
+    </div>
+
+    {{ form.as_p }}
+
+    <div class="d-grid gap-2">
+      <button type="submit" class="btn btn-primary">Register</button>
+    </div>
+  </form>
+
+  <div class="text-center mt-3">
+    <p>Already have an account? <a href="{% url 'login' %}">Login here</a></p>
+  </div>
+</div>
+
+<script>
+  document.getElementById("student-btn").addEventListener("click", function () {
+    this.classList.add("active");
+    document.getElementById("tutor-btn").classList.remove("active");
+    document.getElementById("user_type").value = "student";
+  });
+
+  document.getElementById("tutor-btn").addEventListener("click", function () {
+    this.classList.add("active");
+    document.getElementById("student-btn").classList.remove("active");
+    document.getElementById("user_type").value = "tutor";
+  });
+</script>
+{% endblock %}

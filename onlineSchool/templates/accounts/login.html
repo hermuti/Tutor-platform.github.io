@@ -1,0 +1,58 @@
+{% extends "base.html" %} {% block content %}
+<div class="auth-container">
+  <h2 class="text-center mb-4">Login to Your Account</h2>
+
+  <form method="post" action="{% url 'login' %}">
+    {% csrf_token %} {% if form.errors %}
+    <div class="alert alert-danger">
+      Your username and password didn't match. Please try again.
+    </div>
+    {% endif %}
+
+    <div class="mb-3">
+      <label for="username" class="form-label">Username</label>
+      <input
+        type="text"
+        class="form-control"
+        id="username"
+        name="username"
+        required
+        placeholder="Enter your username"
+      />
+    </div>
+
+    <div class="mb-3">
+      <label for="password" class="form-label">Password</label>
+      <input
+        type="password"
+        class="form-control"
+        id="password"
+        name="password"
+        required
+        placeholder="Enter your password"
+      />
+    </div>
+
+    <div class="mb-3">
+      <label for="role" class="form-label">Login as</label>
+      <select class="form-select" name="role" required>
+        <option value="" selected disabled>Select your role</option>
+        <option value="student">Student</option>
+        <option value="tutor">Tutor</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+
+    <div class="d-grid gap-2 mb-3">
+      <button type="submit" class="btn btn-primary">Login</button>
+    </div>
+
+    <div class="text-center">
+      <p class="mb-1">
+        Don't have an account? <a href="{% url 'register' %}">Register here</a>
+      </p>
+      <p><a href="#">Forgot password?</a></p>
+    </div>
+  </form>
+</div>
+{% endblock %}

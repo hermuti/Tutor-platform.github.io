@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
 from pathlib import Path
-
+import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -48,6 +48,8 @@ INSTALLED_APPS = [
 
 ]
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
@@ -74,11 +76,22 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'onlineSchool.urls'
 
+
+
+WSGI_APPLICATION = 'onlineSchool.wsgi.application'
+
+AUTH_USER_MODEL = 'Home.User'
+
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 8}},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+]
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
+        'APP_DIRS': False,  # Disable app template lookup
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.debug',
@@ -89,11 +102,6 @@ TEMPLATES = [
         },
     },
 ]
-
-WSGI_APPLICATION = 'onlineSchool.wsgi.application'
-
-AUTH_USER_MODEL = 'Home.User'
-
 
 
 # Database

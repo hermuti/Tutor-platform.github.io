@@ -1,13 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
-from django.db.models.signals import post_save
-from django.core.validators import RegexValidator
-from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator, MinValueValidator
 from django.utils import timezone
-from shortuuid.django_fields import ShortUUIDField
-import logging
-
-logger = logging.getLogger(__name__)
 
 # === Constants ===
 ROLE_CHOICES = (
@@ -23,431 +17,264 @@ GENDER_CHOICES = (
     ("Prefer not to say", "Prefer not to say")
 )
 
-IDENTITY_TYPE = (
-    ("Fayda Alias Number (FAN)", "Fayda Alias Number (FAN)"),
-    ("Driver's license", "Driver's license"),
-    ("International passport", "International passport")
+SESSION_MODE_CHOICES = (
+    ('online', 'Online'),
+    ('in_person', 'In Person'),
+    ('hybrid', 'Hybrid')
 )
 
-STATUS_CHOICES = (
-    ('active', 'Active'),
-    ('inactive', 'Inactive'),
-    ('suspended', 'Suspended'),
-    ('pending', 'Pending Verification'),
-)
-
-# Phone number validator
-phone_validator = RegexValidator(
-    regex=r'^\+?1?\d{9,15}$',
-    message="Phone number must be in format: '+999999999'. Up to 15 digits allowed."
+PAYMENT_STATUS_CHOICES = (
+    ('pending', 'Pending'),
+    ('completed', 'Completed'),
+    ('failed', 'Failed'),
+    ('refunded', 'Refunded')
 )
 
 # === Utility ===
 def user_directory_path(instance, filename):
-    ext = filename.split(".")[-1]
-    filename = "%s.%s" % (instance.user.id, ext)
-    return "user_{0}/{1}".format(instance.user.id, filename)
+    ext = filename.split('.')[-1]
+    filename = f"{instance.id}.{ext}"
+    return f"user_{instance.id}/{filename}"
 
-# === Custom User Model ===
+# === Core User Model ===
 class User(AbstractUser):
-    full_name = models.CharField(
-        max_length=100,
-        verbose_name="Full Name",
-        help_text="Enter user's full legal name"
-    )
-    username = models.CharField(
-        max_length=100,
-        unique=True,
-        verbose_name="Username",
-        help_text="Required. 100 characters or fewer. Letters, digits and @/./+/-/_ only."
-    )
-    email = models.EmailField(
-        unique=True,
-        verbose_name="Email Address",
-        help_text="Required. Must be a valid email address."
-    )
+    email = models.EmailField(unique=True)
     phone = models.CharField(
         max_length=17,
-        validators=[phone_validator],
-        verbose_name="Phone Number",
-        help_text="Format: +999999999",
+        validators=[RegexValidator(r'^\+?1?\d{9,15}$')],
         blank=True,
         null=True
     )
     gender = models.CharField(
         max_length=20,
         choices=GENDER_CHOICES,
-        default="Prefer not to say",
-        verbose_name="Gender"
+        default="Prefer not to say"
     )
-    role = models.CharField(
-        max_length=20,
-        choices=ROLE_CHOICES,
-        default="student",
-        verbose_name="System Role"
-    )
-    otp = models.CharField(
-        max_length=100,
+    profile_picture = models.ImageField(
+        upload_to=user_directory_path,
         null=True,
-        blank=True,
-        verbose_name="OTP Code"
+        blank=True
     )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     status = models.CharField(
         max_length=20,
-        choices=STATUS_CHOICES,
-        default='pending',
-        verbose_name="Account Status"
+        default='active',
+        choices=(
+            ('active', 'Active'),
+            ('inactive', 'Inactive'),
+            ('suspended', 'Suspended')
+        )
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+
+    username = models.CharField(max_length=150, unique=True)
+    first_name = models.CharField(max_length=150)
+    last_name = models.CharField(max_length=150)
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username', 'full_name']
+    REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
+
+    def __str__(self):
+        return f"{self.get_full_name()} ({self.role})"
 
     class Meta:
         verbose_name = "User"
         verbose_name_plural = "Users"
-        ordering = ['-created_at']
+        ordering = ['-date_joined']
 
-    def __str__(self):
-        return f"{self.username} ({self.get_role_display()})"
-
-    def is_teacher(self):
-        return self.role == 'tutor' and hasattr(self, 'teacher_profile')
-
-    def is_student(self):
-        return self.role == 'student' and hasattr(self, 'student_profile')
-
-# === Profile Model ===
-class Profile(models.Model):
-    pid = ShortUUIDField(
-        length=7,
-        max_length=25,
-        alphabet="abcdefghijklmnopqrstuvwxyz12345",
-        unique=True,
-        verbose_name="Profile ID"
-    )
-    user = models.OneToOneField(
-        User,
-        on_delete=models.CASCADE,
-        related_name='profile',
-        verbose_name="User Account"
-    )
-    image = models.FileField(
-        upload_to=user_directory_path,
-        default="default.jpg",
-        null=True,
-        blank=True,
-        verbose_name="Profile Image"
-    )
-    mobile_no = models.CharField(
-        max_length=17,
-        validators=[phone_validator],
-        verbose_name="Mobile Number",
-        help_text="Primary contact number"
-    )
-    country = models.CharField(
-        max_length=100,
-        null=True,
-        blank=True,
-        verbose_name="Country"
-    )
-    city = models.CharField(
-        max_length=100,
-        null=True,
-        blank=True,
-        verbose_name="City"
-    )
-    state = models.CharField(
-        max_length=100,
-        null=True,
-        blank=True,
-        verbose_name="State/Province"
-    )
-    address = models.CharField(
-        max_length=255,
-        null=True,
-        blank=True,
-        verbose_name="Full Address"
-    )
-    identity_type = models.CharField(
-        max_length=200,
-        choices=IDENTITY_TYPE,
-        default="Fayda Alias Number (FAN)",
-        null=True,
-        blank=True,
-        verbose_name="ID Type"
-    )
-    identity_image = models.ImageField(
-        upload_to=user_directory_path,
-        default="id.jpg",
-        null=True,
-        blank=True,
-        verbose_name="ID Document"
-    )
-    facebook = models.URLField(
-        null=True,
-        blank=True,
-        verbose_name="Facebook Profile"
-    )
-    twitter = models.URLField(
-        null=True,
-        blank=True,
-        verbose_name="Twitter Profile"
-    )
-    wallet = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=0.00,
-        verbose_name="Wallet Balance"
-    )
-    verified = models.BooleanField(
-        default=False,
-        verbose_name="Verified Account"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "User Profile"
-        verbose_name_plural = "User Profiles"
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f"{self.user.username}'s Profile"
-
-    def clean(self):
-        if not self.mobile_no and not self.user.phone:
-            raise ValidationError("At least one phone number must be provided")
-
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        super().save(*args, **kwargs)
-
-# === Teacher Model ===
-class Teacher(models.Model):
-    user = models.OneToOneField(
-        User,
-        on_delete=models.CASCADE,
-        related_name='teacher_profile',
-        verbose_name="User Account"
-    )
-    qualification = models.CharField(
-        max_length=100,
-        verbose_name="Qualifications",
-        help_text="Degrees, certifications, etc."
-    )
-    bio = models.TextField(
-        null=True,
-        blank=True,
-        verbose_name="Professional Bio"
-    )
-    specialties = models.CharField(
-        max_length=255,
-        null=True,
-        blank=True,
-        verbose_name="Teaching Specialties"
-    )
-    experience_years = models.PositiveIntegerField(
-        default=0,
-        verbose_name="Years of Experience"
-    )
-    hourly_rate = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        default=0.00,
-        verbose_name="Hourly Rate"
-    )
-    is_approved = models.BooleanField(
-        default=False,
-        verbose_name="Approved Teacher"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Teacher"
-        verbose_name_plural = "Teachers"
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f"{self.user.full_name} (Teacher)"
-
-    def clean(self):
-        if self.user.role != 'tutor':
-            raise ValidationError("Associated user must have tutor role")
-
-# === Student Model ===
+# === Role-Specific Models ===
 class Student(models.Model):
-    user = models.OneToOneField(
-        User,
-        on_delete=models.CASCADE,
-        related_name='student_profile',
-        verbose_name="User Account"
-    )
-    grade_level = models.CharField(
-        max_length=100,
-        verbose_name="Grade Level"
-    )
-    school = models.CharField(
-        max_length=255,
-        null=True,
-        blank=True,
-        verbose_name="Current School"
-    )
-    learning_goals = models.TextField(
-        null=True,
-        blank=True,
-        verbose_name="Learning Objectives"
-    )
-    parent_guardian_name = models.CharField(
-        max_length=100,
-        null=True,
-        blank=True,
-        verbose_name="Parent/Guardian Name"
-    )
-    parent_guardian_contact = models.CharField(
-        max_length=17,
-        validators=[phone_validator],
-        null=True,
-        blank=True,
-        verbose_name="Parent/Guardian Contact"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Student"
-        verbose_name_plural = "Students"
-        ordering = ['-created_at']
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='student_profile',primary_key=True )
+    grade_level = models.CharField(max_length=50)
+    learning_preference = models.TextField(blank=True)
+    preferred_language = models.CharField(max_length=50, default='English')
 
     def __str__(self):
-        return f"{self.user.full_name} (Student)"
+        return f"Student: {self.user.get_full_name()}"
 
-    def clean(self):
-        if self.user.role != 'student':
-            raise ValidationError("Associated user must have student role")
-
-# === Course Category ===
-class CourseCategory(models.Model):
-    title = models.CharField(
-        max_length=150,
-        unique=True,
-        verbose_name="Category Title"
-    )
-    description = models.TextField(
-        verbose_name="Category Description"
-    )
-    icon = models.CharField(
-        max_length=50,
-        null=True,
-        blank=True,
-        help_text="Font Awesome icon class"
-    )
-    is_active = models.BooleanField(
-        default=True,
-        verbose_name="Active Category"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Course Category"
-        verbose_name_plural = "Course Categories"
-        ordering = ['title']
+class Tutor(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='tutor_profile',primary_key=True)
+    qualifications = models.TextField()
+    subjects = models.CharField(max_length=255)
+    availability = models.JSONField(default=dict)
+    rating = models.FloatField(default=0.0, validators=[MinValueValidator(0.0)])
 
     def __str__(self):
-        return self.title
+        return f"Tutor: {self.user.get_full_name()}"
 
-# === Course Model ===
+class Admin(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='admin_profile',primary_key=True)
+    admin_level = models.CharField(
+        max_length=20,
+        choices=(
+            ('super', 'Super Admin'),
+            ('academic', 'Academic Admin'),
+            ('support', 'Support Admin')
+        )
+    )
+
+    def __str__(self):
+        return f"Admin: {self.user.get_full_name()}"
+
+# === Academic Models ===
 class Course(models.Model):
-    category = models.ForeignKey(
-        CourseCategory,
-        on_delete=models.CASCADE,
-        related_name='courses',
-        verbose_name="Category"
-    )
-    teacher = models.ForeignKey(
-        Teacher,
-        on_delete=models.CASCADE,
-        related_name='courses',
-        verbose_name="Instructor"
-    )
-    title = models.CharField(
-        max_length=150,
-        verbose_name="Course Title"
-    )
-    description = models.TextField(
-        verbose_name="Course Description"
-    )
-    syllabus = models.TextField(
-        null=True,
-        blank=True,
-        verbose_name="Detailed Syllabus"
-    )
-    duration_weeks = models.PositiveIntegerField(
-        default=4,
-        verbose_name="Duration (weeks)"
-    )
-    price = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        default=0.00,
-        verbose_name="Course Price"
-    )
-    is_featured = models.BooleanField(
-        default=False,
-        verbose_name="Featured Course"
-    )
+    tutor = models.ForeignKey(Tutor, on_delete=models.CASCADE, related_name='courses')
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    category = models.CharField(max_length=100)
+    level = models.CharField(max_length=50)
+    students = models.ManyToManyField(Student, through='Enrollment', related_name='enrolled_courses')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.title} (by {self.tutor})"
+
+class Session(models.Model):
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='sessions')
+    tutor = models.ForeignKey(Tutor, on_delete=models.CASCADE, related_name='sessions')
+    title = models.CharField(max_length=200)
+    scheduled_time = models.DateTimeField()
+    duration = models.DurationField()
+    mode = models.CharField(max_length=20, choices=SESSION_MODE_CHOICES, default='online')
+    video_url = models.URLField(blank=True)
     status = models.CharField(
         max_length=20,
         choices=(
-            ('draft', 'Draft'),
-            ('published', 'Published'),
-            ('archived', 'Archived'),
+            ('scheduled', 'Scheduled'),
+            ('in_progress', 'In Progress'),
+            ('completed', 'Completed'),
+            ('cancelled', 'Cancelled')
         ),
-        default='draft',
-        verbose_name="Course Status"
+        default='scheduled'
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Course"
-        verbose_name_plural = "Courses"
-        ordering = ['-created_at']
-        unique_together = ['category', 'title']
 
     def __str__(self):
-        return f"{self.title} by {self.teacher.user.username}"
+        return f"{self.title} at {self.scheduled_time}"
 
-# === Signals ===
-def create_user_profile(sender, instance, created, **kwargs):
-    if created:
-        try:
-            Profile.objects.create(
-                user=instance,
-                mobile_no=instance.phone or ""
-            )
-            if instance.role == 'tutor':
-                Teacher.objects.create(user=instance)
-            elif instance.role == 'student':
-                Student.objects.create(user=instance)
-        except Exception as e:
-            logger.error(f"Error creating profile: {e}")
+class Enrollment(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    enrolled_at = models.DateTimeField(auto_now_add=True)
+    completed = models.BooleanField(default=False)
+    completion_date = models.DateTimeField(null=True, blank=True)
 
-def update_user_roles(sender, instance, created, **kwargs):
-    if not created:
-        try:
-            if hasattr(instance, 'teacher_profile'):
-                instance.role = 'tutor'
-                instance.save()
-            elif hasattr(instance, 'student_profile'):
-                instance.role = 'student'
-                instance.save()
-        except Exception as e:
-            logger.error(f"Error updating user roles: {e}")
+    class Meta:
+        unique_together = ('student', 'course')
 
-post_save.connect(create_user_profile, sender=User)
-post_save.connect(update_user_roles, sender=Teacher)
-post_save.connect(update_user_roles, sender=Student)
+class Material(models.Model):
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='materials')
+    tutor = models.ForeignKey(Tutor, on_delete=models.CASCADE, related_name='uploaded_materials')
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    file = models.FileField(upload_to='course_materials/')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.title} (for {self.course})"
+
+class SessionBooking(models.Model):
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='bookings')
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='bookings')
+    booked_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(
+        max_length=20,
+        choices=(
+            ('confirmed', 'Confirmed'),
+            ('cancelled', 'Cancelled'),
+            ('attended', 'Attended'),
+            ('no_show', 'No Show')
+        ),
+        default='confirmed'
+    )
+
+    class Meta:
+        unique_together = ('session', 'student')
+
+class Attendance(models.Model):
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='attendance_records')
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='attendance')
+    status = models.CharField(
+        max_length=20,
+        choices=(
+            ('present', 'Present'),
+            ('absent', 'Absent'),
+            ('late', 'Late')
+        )
+    )
+    notes = models.TextField(blank=True)
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = "Attendance records"
+
+# === Interaction Models ===
+class Notification(models.Model):
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    message = models.TextField()
+    notification_type = models.CharField(max_length=50)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='sent_notifications')
+
+    def __str__(self):
+        return f"{self.notification_type} notification for {self.recipient}"
+
+class ChatMessage(models.Model):
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='chat_messages', null=True, blank=True)
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_messages')
+    content = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-timestamp']
+
+# === Career Test Models ===
+class CareerTestResult(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='career_tests')
+    test_date = models.DateTimeField(auto_now_add=True)
+    results = models.JSONField()
+    interpretation = models.TextField()
+    recommendations = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"Career test result for {self.student}"
+
+# === Payment Models ===
+class Payment(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='payments')
+    course = models.ForeignKey(Course, on_delete=models.SET_NULL, null=True, blank=True)
+    session = models.ForeignKey(Session, on_delete=models.SET_NULL, null=True, blank=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
+    payment_method = models.CharField(max_length=50)
+    transaction_id = models.CharField(max_length=100, unique=True)
+    status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
+    timestamp = models.DateTimeField(auto_now_add=True)
+    receipt_url = models.URLField(blank=True)
+
+    def __str__(self):
+        return f"Payment #{self.id} by {self.student}"
+
+class Commission(models.Model):
+    tutor = models.ForeignKey(Tutor, on_delete=models.CASCADE, related_name='commissions')
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='commissions')
+    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
+    is_paid = models.BooleanField(default=False)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Commission for {self.tutor} from session #{self.session.id}"
+
+
+class StudentProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    # Add student-specific fields
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class TutorProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    # Add tutor-specific fields
+    created_at = models.DateTimeField(auto_now_add=True)

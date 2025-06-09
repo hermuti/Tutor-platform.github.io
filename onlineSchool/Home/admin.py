@@ -1,138 +1,145 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from django.utils.html import format_html
-from .models import User, Profile, Teacher, Student, CourseCategory, Course
+from .models import *
 
-# ==================== INLINES ====================
-class ProfileInline(admin.StackedInline):
-    model = Profile
-    can_delete = False
-    verbose_name_plural = 'Profile'
-    fields = ('mobile_no', 'country', 'city', 'state', 'address', 
-              'identity_type', 'identity_image', 'facebook', 'twitter', 'wallet', 'verified')
-    
-class TeacherInline(admin.StackedInline):
-    model = Teacher
-    can_delete = False
-    verbose_name_plural = 'Teacher Details'
-    fields = ('qualification', 'bio', 'specialties', 'experience_years', 'hourly_rate', 'is_approved')
-
-class StudentInline(admin.StackedInline):
-    model = Student
-    can_delete = False
-    verbose_name_plural = 'Student Details'
-    fields = ('grade_level', 'school', 'learning_goals', 'parent_guardian_name', 'parent_guardian_contact')
-
-# ==================== MODEL ADMINS ====================
+# === Custom User Admin ===
 class CustomUserAdmin(UserAdmin):
-    inlines = (ProfileInline, TeacherInline, StudentInline)
-    list_display = ('username', 'email', 'full_name', 'role', 'status', 'is_active', 'last_login')
-    list_filter = ('role', 'status', 'is_active', 'is_staff', 'is_superuser')
-    search_fields = ('username', 'email', 'full_name', 'phone')
-    ordering = ('-date_joined',)
+    model = User
+    list_display = ('email', 'username', 'first_name', 'last_name', 'role', 'status', 'is_staff')
+    list_filter = ('role', 'status', 'is_staff', 'is_superuser')
     fieldsets = (
-        (None, {'fields': ('username', 'password')}),
-        ('Personal Info', {'fields': ('full_name', 'email', 'phone', 'gender')}),
-        ('Permissions', {'fields': ('role', 'status', 'is_active', 'is_staff', 'is_superuser', 
-                                  'groups', 'user_permissions')}),
-        ('Important Dates', {'fields': ('last_login', 'date_joined')}),
+        (None, {'fields': ('username', 'email', 'password')}),
+        ('Personal Info', {'fields': ('first_name', 'last_name', 'phone', 'gender', 'profile_picture')}),
+        ('Permissions', {'fields': ('role', 'status', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+        ('Important dates', {'fields': ('last_login', 'date_joined')}),
     )
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('username', 'email', 'full_name', 'phone', 'role', 'password1', 'password2'),
+            'fields': ('email', 'username', 'first_name', 'last_name', 'role', 'password1', 'password2'),
         }),
     )
+    search_fields = ('email', 'username', 'first_name', 'last_name')
+    ordering = ('-date_joined',)
 
-    def get_inline_instances(self, request, obj=None):
-        if not obj:
-            return []
-        if obj.role == 'tutor':
-            return [TeacherInline(self.model, self.admin_site)]
-        elif obj.role == 'student':
-            return [StudentInline(self.model, self.admin_site)]
-        return []
-
-class ProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'mobile_no', 'country', 'verified', 'wallet_balance')
-    list_filter = ('verified', 'country')
-    search_fields = ('user__username', 'user__email', 'mobile_no')
-    
-    def wallet_balance(self, obj):
-        return f"${obj.wallet:,.2f}"
-    wallet_balance.short_description = 'Balance'
-
-class TeacherAdmin(admin.ModelAdmin):
-    list_display = ('user', 'qualification', 'experience', 'hourly_rate', 'is_approved')
-    list_filter = ('is_approved', 'experience_years')
-    search_fields = ('user__username', 'user__email', 'qualification', 'specialties')
-    raw_id_fields = ('user',)
-    actions = ['approve_teachers', 'disapprove_teachers']
-
-    def experience(self, obj):
-        return f"{obj.experience_years} years"
-    experience.short_description = 'Experience'
-
-    def approve_teachers(self, request, queryset):
-        queryset.update(is_approved=True)
-    approve_teachers.short_description = "Approve selected teachers"
-
-    def disapprove_teachers(self, request, queryset):
-        queryset.update(is_approved=False)
-    disapprove_teachers.short_description = "Disapprove selected teachers"
-
+# === Role-Specific Admin Classes ===
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ('user', 'grade_level', 'school', 'parent_contact')
-    list_filter = ('grade_level',)
-    search_fields = ('user__username', 'user__email', 'grade_level', 'school')
+    list_display = ('user', 'grade_level', 'preferred_language')
+    search_fields = ('user__email', 'user__first_name', 'user__last_name', 'grade_level')
     raw_id_fields = ('user',)
 
-    def parent_contact(self, obj):
-        if obj.parent_guardian_contact:
-            return obj.parent_guardian_contact
-        return "Not provided"
-    parent_contact.short_description = 'Parent Contact'
+class TutorAdmin(admin.ModelAdmin):
+    list_display = ('user', 'subjects', 'rating', 'get_qualifications_preview')
+    search_fields = ('user__email', 'user__first_name', 'user__last_name', 'subjects')
+    list_filter = ('rating',)
+    raw_id_fields = ('user',)
+    
+    def get_qualifications_preview(self, obj):
+        return f"{obj.qualifications[:50]}..." if len(obj.qualifications) > 50 else obj.qualifications
+    get_qualifications_preview.short_description = 'Qualifications Preview'
 
-class CourseCategoryAdmin(admin.ModelAdmin):
-    list_display = ('title', 'course_count', 'is_active')
-    list_filter = ('is_active',)
-    search_fields = ('title', 'description')
+class AdminProfileAdmin(admin.ModelAdmin):
+    list_display = ('user', 'admin_level')
+    list_filter = ('admin_level',)
+    search_fields = ('user__email', 'user__first_name', 'user__last_name')
+    raw_id_fields = ('user',)
 
-    def course_count(self, obj):
-        return obj.courses.count()
-    course_count.short_description = 'Courses'
+# === Academic Models Admin ===
 
 class CourseAdmin(admin.ModelAdmin):
-    list_display = ('title', 'category', 'teacher', 'price', 'status', 'duration')
-    list_filter = ('status', 'category', 'is_featured')
-    search_fields = ('title', 'description', 'teacher__user__username')
-    raw_id_fields = ('teacher',)
-    readonly_fields = ('created_at', 'updated_at')
-    fieldsets = (
-        (None, {
-            'fields': ('title', 'category', 'teacher', 'description')
-        }),
-        ('Details', {
-            'fields': ('syllabus', 'duration_weeks', 'price', 'is_featured')
-        }),
-        ('Status', {
-            'fields': ('status', 'created_at', 'updated_at')
-        }),
-    )
+    list_display = ('title', 'tutor', 'category', 'level', 'created_at')
+    list_filter = ('category', 'level', 'created_at')
+    search_fields = ('title', 'description', 'tutor__user__first_name', 'tutor__user__last_name')
+    raw_id_fields = ('tutor',)
+   
+class SessionAdmin(admin.ModelAdmin):
+    list_display = ('title', 'course', 'tutor', 'scheduled_time', 'duration', 'mode', 'status')
+    list_filter = ('mode', 'status', 'scheduled_time')
+    search_fields = ('title', 'course__title', 'tutor__user__first_name', 'tutor__user__last_name')
+    raw_id_fields = ('course', 'tutor')
+    date_hierarchy = 'scheduled_time'
+class EnrollmentInline(admin.TabularInline):  # or admin.StackedInline
+    model = Enrollment
+    extra = 1
+    raw_id_fields = ('student',)
+class EnrollmentAdmin(admin.ModelAdmin):
+    list_display = ('student', 'course', 'enrolled_at', 'completed', 'completion_date')
+    list_filter = ('completed', 'enrolled_at', 'course')
+    search_fields = ('student__user__email', 'course__title')
+    raw_id_fields = ('student', 'course')
 
-    def duration(self, obj):
-        return f"{obj.duration_weeks} weeks"
-    duration.short_description = 'Duration'
+class MaterialAdmin(admin.ModelAdmin):
+    list_display = ('title', 'course', 'tutor', 'created_at')
+    search_fields = ('title', 'course__title', 'tutor__user__first_name')
+    raw_id_fields = ('course', 'tutor')
+    date_hierarchy = 'created_at'
 
-# ==================== REGISTRATIONS ====================
+class SessionBookingAdmin(admin.ModelAdmin):
+    list_display = ('session', 'student', 'booked_at', 'status')
+    list_filter = ('status', 'booked_at')
+    search_fields = ('session__title', 'student__user__email')
+    raw_id_fields = ('session', 'student')
+
+class AttendanceAdmin(admin.ModelAdmin):
+    list_display = ('session', 'student', 'status', 'recorded_at')
+    list_filter = ('status', 'recorded_at')
+    search_fields = ('session__title', 'student__user__email')
+    raw_id_fields = ('session', 'student')
+
+# === Interaction Models Admin ===
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ('recipient', 'notification_type', 'is_read', 'created_at', 'sent_by')
+    list_filter = ('notification_type', 'is_read', 'created_at')
+    search_fields = ('recipient__email', 'message')
+    raw_id_fields = ('recipient', 'sent_by')
+    date_hierarchy = 'created_at'
+
+class ChatMessageAdmin(admin.ModelAdmin):
+    list_display = ('sender', 'recipient', 'session', 'timestamp', 'is_read')
+    list_filter = ('is_read', 'timestamp')
+    search_fields = ('sender__email', 'recipient__email', 'content')
+    raw_id_fields = ('sender', 'recipient', 'session')
+    date_hierarchy = 'timestamp'
+
+# === Career Test Admin ===
+class CareerTestResultAdmin(admin.ModelAdmin):
+    list_display = ('student', 'test_date')
+    search_fields = ('student__user__email', 'interpretation')
+    raw_id_fields = ('student',)
+    date_hierarchy = 'test_date'
+
+# === Payment Models Admin ===
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ('student', 'amount', 'payment_method', 'status', 'timestamp')
+    list_filter = ('status', 'payment_method', 'timestamp')
+    search_fields = ('student__user__email', 'transaction_id')
+    raw_id_fields = ('student', 'course', 'session')
+    date_hierarchy = 'timestamp'
+
+class CommissionAdmin(admin.ModelAdmin):
+    list_display = ('tutor', 'session', 'amount', 'is_paid', 'paid_at')
+    list_filter = ('is_paid', 'paid_at')
+    search_fields = ('tutor__user__email', 'session__title')
+    raw_id_fields = ('tutor', 'session')
+    date_hierarchy = 'created_at'
+
+# === Register Models ===
 admin.site.register(User, CustomUserAdmin)
-admin.site.register(Profile, ProfileAdmin)
-admin.site.register(Teacher, TeacherAdmin)
 admin.site.register(Student, StudentAdmin)
-admin.site.register(CourseCategory, CourseCategoryAdmin)
-admin.site.register(Course, CourseAdmin)
+admin.site.register(Tutor, TutorAdmin)
+admin.site.register(Admin, AdminProfileAdmin)
 
-# ==================== ADMIN CONFIG ====================
-admin.site.site_header = "Tutor Platform Administration"
-admin.site.site_title = "Tutor Platform Admin Portal"
-admin.site.index_title = "Welcome to Tutor Platform Admin"
+admin.site.register(Course, CourseAdmin)
+admin.site.register(Session, SessionAdmin)
+admin.site.register(Enrollment, EnrollmentAdmin)
+admin.site.register(Material, MaterialAdmin)
+admin.site.register(SessionBooking, SessionBookingAdmin)
+admin.site.register(Attendance, AttendanceAdmin)
+
+admin.site.register(Notification, NotificationAdmin)
+admin.site.register(ChatMessage, ChatMessageAdmin)
+
+admin.site.register(CareerTestResult, CareerTestResultAdmin)
+
+admin.site.register(Payment, PaymentAdmin)
+admin.site.register(Commission, CommissionAdmin)
