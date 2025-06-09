@@ -4,7 +4,7 @@
 
   {% if form.errors %}
   <div class="alert alert-danger">
-    Invalid username or password. Please try again.
+    Invalid email or password. Please try again.
   </div>
   {% endif %}
 
@@ -12,12 +12,12 @@
     {% csrf_token %}
 
     <div class="mb-3">
-      <label for="id_username" class="form-label">Username</label>
+      <label for="id_email" class="form-label">Email</label>
       <input
-        type="text"
+        type="email"
         name="username"
         class="form-control"
-        id="id_username"
+        id="id_email"
         required
       />
     </div>

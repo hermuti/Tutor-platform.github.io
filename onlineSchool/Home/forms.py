@@ -1,5 +1,5 @@
-# forms.py
 from django import forms
+from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.forms import UserCreationForm
 from .models import User, Student, Tutor
 
@@ -17,3 +17,8 @@ class TutorRegisterForm(UserCreationForm):
     class Meta:
         model = User
         fields = ['email', 'username', 'password1', 'password2', 'qualifications', 'subjects']
+
+
+
+class EmailAuthenticationForm(AuthenticationForm):
+    username = forms.EmailField(label="Email", widget=forms.EmailInput(attrs={'autofocus': True}))

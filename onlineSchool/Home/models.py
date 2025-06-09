@@ -75,11 +75,35 @@ class User(AbstractUser):
     def __str__(self):
         return self.username
 
+    def save(self, *args, **kwargs):
+        # Sync role with boolean fields
+        if self.role == 'student':
+            self.is_student = True
+            self.is_tutor = False
+            self.is_admin = False
+        elif self.role == 'tutor':
+            self.is_student = False
+            self.is_tutor = True
+            self.is_admin = False
+        elif self.role == 'admin':
+            self.is_student = False
+            self.is_tutor = False
+            self.is_admin = True
+        
+        super().save(*args, **kwargs)
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
 
     def __str__(self):
         return f"{self.get_full_name()} ({self.role})"
+    def save(self, *args, **kwargs):
+        if self.role == 'student':
+            self.is_student = True
+            self.is_tutor = False
+            self.is_admin = False
+        # ... (similar for tutor/admin)
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = "User"

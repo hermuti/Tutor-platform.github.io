@@ -77,6 +77,7 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'onlineSchool.urls'
 
 
+LOGIN_REDIRECT_URL = 'home'  # Fallback URL if role redirection fails
 
 WSGI_APPLICATION = 'onlineSchool.wsgi.application'
 

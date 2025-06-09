@@ -7,15 +7,34 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from .forms import StudentRegisterForm, TutorRegisterForm
+from Home.forms import EmailAuthenticationForm  
 from django.contrib.auth import get_user_model
 from .models import User, StudentProfile, TutorProfile  # Updated imports
 
 User = get_user_model()
 
 # ====================== Authentication Views ======================
+
+from django.urls import reverse_lazy
+
 class CustomLoginView(LoginView):
     template_name = 'accounts/login.html'
-    redirect_authenticated_user = True  # Add this line
+    authentication_form = EmailAuthenticationForm
+    redirect_authenticated_user = True
+    
+    # Add this to completely override default behavior
+    def get_success_url(self):
+        role = self.request.POST.get('role')
+        return self._get_redirect_url(role)
+    
+    def _get_redirect_url(self, role):
+        if role == 'student':
+            return reverse_lazy('student_dashboard')
+        elif role == 'tutor':
+            return reverse_lazy('tutor_dashboard')
+        elif role == 'admin':
+            return reverse_lazy('admin_dashboard')
+        return reverse_lazy('home')  # Fallback URL
     
     def form_valid(self, form):
         role = self.request.POST.get('role')
@@ -23,38 +42,10 @@ class CustomLoginView(LoginView):
         
         if not role:
             messages.error(self.request, "Please select a role")
-            return redirect('login')
-        
-        # Validate user role
-        if not self._validate_user_role(user, role):
-            messages.error(self.request, "Invalid role for this account")
-            return redirect('login')
-        
+            return self.form_invalid(form)
+            
         login(self.request, user)
-        #return self._redirect_based_on_role(role)
-        return self._redirect_based_on_role(role)
-
-    
-    def _validate_user_role(self, user, role):
-        """Check if user has the selected role"""
-        if role == 'student' and user.is_student:
-            return True
-        elif role == 'tutor' and user.is_tutor:
-            return True
-        elif role == 'admin' and user.is_admin:
-            return True
-        return False
-    
-    def _redirect_based_on_role(self, role):
-        """Redirect to appropriate dashboard based on role"""
-        if role == 'student':
-            return redirect('student_dashboard')
-        elif role == 'tutor':
-            return redirect('tutor_dashboard')
-        elif role == 'admin':
-            return redirect('admin_dashboard')
-        return redirect('home')
-
+        return super().form_valid(form)  # Will use get_success_url
 class CustomLogoutView(LogoutView):
     next_page = reverse_lazy('home')
     

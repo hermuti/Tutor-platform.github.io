@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path,include
 from .views import *
 # (
 #     register_view,
@@ -16,10 +16,12 @@ urlpatterns = [
     path('accounts/logout/', CustomLogoutView.as_view(), name='logout'),
     
     # Dashboards
-    path('dashboard/student/', StudentDashboardView.as_view(), name='student_dashboard'),
-    path('dashboard/tutor/', TutorDashboardView.as_view(), name='tutor_dashboard'),
-    path('dashboard/admin/', AdminDashboardView.as_view(), name='admin_dashboard'),
+    path('student/', include('student_dashboard.urls')),
+    path('tutor/', include('tutor_dashboard.urls')),
+    #path('admin/', include('admin_dashboard.urls')),
 ]
+
+
 
 # login dashboard view
 from django.utils.decorators import method_decorator
